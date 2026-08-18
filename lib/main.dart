@@ -188,6 +188,7 @@ class HomeMenuScreen extends StatelessWidget {
       _MenuItem('Product List', 'Efficient scrolling list (FlatList equivalent)', Icons.list_alt_outlined, (ctx) => const ProductListScreen()),
       _MenuItem('Browse Products', 'Shared state demo — add to cart', Icons.storefront_outlined, (ctx) => const BrowseProductsScreen()),
       _MenuItem('Cart', 'Shows the same shared state, live', Icons.shopping_cart_outlined, (ctx) => const CartScreen()),
+      _MenuItem('Team Tasks', 'Fetch + toggle-update via REST API', Icons.task_alt_outlined, (ctx) => const TeamTasksScreen()),
     ];
 
     return Scaffold(
@@ -1783,5 +1784,169 @@ class CartScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SCREEN 12 — Team Tasks
+//
+// A different REST pattern from Clients (which creates/edits full records)
+// and Weather (which is read-only): here, tapping a checkbox sends a PATCH
+// request to update just one field (`completed`) on the server, with the
+// checkbox optimistically flipping immediately and reverting if the request
+// fails — a common real-world update pattern.
+// ---------------------------------------------------------------------------
+
+class TeamTask {
+  final int id;
+  final String title;
+  bool completed;
+  TeamTask({required this.id, required this.title, required this.completed});
+  factory TeamTask.fromJson(Map<String, dynamic> j) => TeamTask(id: j['id'], title: j['title'] ?? '', completed: j['completed'] ?? false);
+}
+
+class TeamTasksScreen extends StatefulWidget {
+  const TeamTasksScreen({super.key});
+  @override
+  State<TeamTasksScreen> createState() => _TeamTasksScreenState();
+}
+
+class _TeamTasksScreenState extends State<TeamTasksScreen> {
+  LoadState state = LoadState.loading;
+  List<TeamTask> tasks = [];
+  String errorMessage = '';
+  final Set<int> _updatingIds = {}; // tracks which rows show a small spinner while their PATCH is in flight
+
+  static const _url = 'https://jsonplaceholder.typicode.com/todos';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  // ---- FETCH (GET) ----
+  Future<void> _load() async {
+    setState(() => state = LoadState.loading);
+    try {
+      final res = await http.get(Uri.parse('$_url?_limit=10'));
+      if (res.statusCode != 200) throw Exception('Server responded with ${res.statusCode}');
+      final List data = jsonDecode(res.body);
+      setState(() {
+        tasks = data.map((e) => TeamTask.fromJson(e)).toList();
+        state = LoadState.success;
+      });
+    } catch (e) {
+      setState(() {
+        errorMessage = e.toString();
+        state = LoadState.error;
+      });
+    }
+  }
+
+  // ---- UPDATE (PATCH) ----
+  Future<void> _toggle(TeamTask task) async {
+    final previous = task.completed;
+    setState(() {
+      task.completed = !task.completed; // optimistic UI update
+      _updatingIds.add(task.id);
+    });
+    try {
+      final res = await http.patch(
+        Uri.parse('${_url}/${task.id}'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'completed': task.completed}),
+      );
+      if (res.statusCode != 200) throw Exception('Update failed (${res.statusCode})');
+    } catch (e) {
+      // Revert on failure and tell the user — don't leave the UI showing a
+      // state the server never actually confirmed.
+      setState(() => task.completed = previous);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update: $e'), backgroundColor: AppTheme.errorRed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _updatingIds.remove(task.id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          AppTopBar(title: 'Team Tasks', subtitle: state == LoadState.success ? '${tasks.where((t) => t.completed).length}/${tasks.length} completed' : 'Connected to REST API', showBack: true),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: KeyedSubtree(key: ValueKey(state), child: _body()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _body() {
+    switch (state) {
+      case LoadState.loading:
+        return const Center(child: CircularProgressIndicator(color: AppTheme.navyPrimary));
+      case LoadState.error:
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.cloud_off, color: AppTheme.errorRed, size: 48),
+              const SizedBox(height: 12),
+              const Text("Couldn't load tasks", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppTheme.ink)),
+              const SizedBox(height: 4),
+              Text(errorMessage, style: const TextStyle(fontSize: 12, color: AppTheme.slate), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              SizedBox(width: 140, child: AppButton(label: 'Retry', onPressed: _load, icon: Icons.refresh)),
+            ]),
+          ),
+        );
+      case LoadState.success:
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: tasks.length,
+          itemBuilder: (ctx, i) {
+            final task = tasks[i];
+            final isUpdating = _updatingIds.contains(task.id);
+            return FadeSlideIn(
+              index: i,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: AppCard(
+                  child: Row(
+                    children: [
+                      isUpdating
+                          ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.navyPrimary))
+                          : Checkbox(
+                              value: task.completed,
+                              activeColor: AppTheme.navyPrimary,
+                              onChanged: (_) => _toggle(task),
+                            ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          task.title,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: task.completed ? AppTheme.slate : AppTheme.ink,
+                            decoration: task.completed ? TextDecoration.lineThrough : null,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+    }
   }
 }
