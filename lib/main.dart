@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 
 // ---------------------------------------------------------------------------
 // TecniForge — Unified app
@@ -29,10 +30,10 @@ class AppTheme {
   static const radiusMd = 14.0;
 
   static ThemeData get themeData => ThemeData(
-    useMaterial3: true,
-    scaffoldBackgroundColor: canvas,
-    colorScheme: ColorScheme.fromSeed(seedColor: navyPrimary, primary: navyPrimary, error: errorRed),
-  );
+        useMaterial3: true,
+        scaffoldBackgroundColor: canvas,
+        colorScheme: ColorScheme.fromSeed(seedColor: navyPrimary, primary: navyPrimary, error: errorRed),
+      );
 }
 
 final FlutterLocalNotificationsPlugin notificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -43,10 +44,64 @@ Future<void> _initNotifications() async {
   await notificationsPlugin.initialize(initSettings);
 }
 
+// ---------------------------------------------------------------------------
+// SHARED APP STATE — Provider / ChangeNotifier
+//
+// The task asked for Context API or Redux — those are React/React Native
+// concepts. Flutter's direct, widely-used equivalent for scalable shared
+// state is the `provider` package: a ChangeNotifier holds the state and
+// business logic in one place, and ANY widget anywhere in the tree can read
+// it or listen for changes, without it being passed down manually screen
+// to screen (no prop drilling) — same goal as Context API/Redux.
+// ---------------------------------------------------------------------------
+
+class CartItem {
+  final String name;
+  final int price;
+  int quantity;
+  CartItem({required this.name, required this.price, this.quantity = 1});
+}
+
+class CartState extends ChangeNotifier {
+  final List<CartItem> _items = [];
+  List<CartItem> get items => List.unmodifiable(_items);
+
+  int get totalItems => _items.fold(0, (sum, i) => sum + i.quantity);
+  int get totalPrice => _items.fold(0, (sum, i) => sum + i.price * i.quantity);
+
+  void addProduct(String name, int price) {
+    final existing = _items.where((i) => i.name == name).toList();
+    if (existing.isNotEmpty) {
+      existing.first.quantity++;
+    } else {
+      _items.add(CartItem(name: name, price: price));
+    }
+    notifyListeners(); // tells every listening widget to rebuild — this is
+                        // the "update propagates everywhere" part of Context/Redux
+  }
+
+  void removeProduct(String name) {
+    _items.removeWhere((i) => i.name == name);
+    notifyListeners();
+  }
+
+  void clear() {
+    _items.clear();
+    notifyListeners();
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _initNotifications();
-  runApp(const TecniForgeApp());
+  runApp(
+    // ChangeNotifierProvider makes CartState reachable from every screen
+    // below it in the widget tree — the "store" that Redux/Context provide.
+    ChangeNotifierProvider(
+      create: (_) => CartState(),
+      child: const TecniForgeApp(),
+    ),
+  );
 }
 
 class TecniForgeApp extends StatelessWidget {
@@ -131,6 +186,8 @@ class HomeMenuScreen extends StatelessWidget {
       _MenuItem('Business Notes', 'Local storage — survives app restart', Icons.save_outlined, (ctx) => const LocalStorageScreen()),
       _MenuItem('Weather', 'API + navigation + saved favorites', Icons.wb_sunny_outlined, (ctx) => const WeatherCitiesScreen()),
       _MenuItem('Product List', 'Efficient scrolling list (FlatList equivalent)', Icons.list_alt_outlined, (ctx) => const ProductListScreen()),
+      _MenuItem('Browse Products', 'Shared state demo — add to cart', Icons.storefront_outlined, (ctx) => const BrowseProductsScreen()),
+      _MenuItem('Cart', 'Shows the same shared state, live', Icons.shopping_cart_outlined, (ctx) => const CartScreen()),
     ];
 
     return Scaffold(
@@ -600,21 +657,21 @@ class _ClientListScreenState extends State<ClientListScreen> {
             return FadeSlideIn(
               index: i,
               child: Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: AppCard(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(c.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
-                          if (c.body.isNotEmpty) Text(c.body, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppTheme.slate)),
-                        ]),
-                      ),
-                      IconButton(icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.slate), onPressed: () => _openForm(existing: c)),
-                      IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed), onPressed: () => _delete(c)),
-                    ],
-                  ),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: AppCard(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(c.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
+                        if (c.body.isNotEmpty) Text(c.body, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppTheme.slate)),
+                      ]),
+                    ),
+                    IconButton(icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.slate), onPressed: () => _openForm(existing: c)),
+                    IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed), onPressed: () => _delete(c)),
+                  ],
                 ),
+              ),
               ),
             );
           },
@@ -827,14 +884,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   static const _channelName = 'Reminders';
 
   NotificationDetails get _details => const NotificationDetails(
-    android: AndroidNotificationDetails(
-      _channelId,
-      _channelName,
-      channelDescription: 'Scheduled reminders from TecniForge',
-      importance: Importance.high,
-      priority: Priority.high,
-    ),
-  );
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: 'Scheduled reminders from TecniForge',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      );
 
   Future<void> _sendNow() async {
     await notificationsPlugin.show(
@@ -998,33 +1055,33 @@ class _DashTab extends StatelessWidget {
   }
 
   Widget _statCard(String label, String value, String delta) => AppCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.ink)),
-        const SizedBox(height: 4),
-        Text(delta, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.successGreen)),
-      ],
-    ),
-  );
-
-  Widget _activityRow(String name, String time, Color color) => Row(
-    children: [
-      Icon(Icons.check_circle, color: color, size: 16),
-      const SizedBox(width: 12),
-      Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(name, style: const TextStyle(fontSize: 13, color: AppTheme.ink)),
-            Text(time, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
+            Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
+            const SizedBox(height: 4),
+            Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.ink)),
+            const SizedBox(height: 4),
+            Text(delta, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.successGreen)),
           ],
         ),
-      ),
-    ],
-  );
+      );
+
+  Widget _activityRow(String name, String time, Color color) => Row(
+        children: [
+          Icon(Icons.check_circle, color: color, size: 16),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: const TextStyle(fontSize: 13, color: AppTheme.ink)),
+                Text(time, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
+              ],
+            ),
+          ),
+        ],
+      );
 }
 
 class _TasksTab extends StatefulWidget {
@@ -1176,21 +1233,21 @@ class _TaskListScreenState extends State<TaskListScreen> {
             child: _tasks.isEmpty
                 ? const Center(child: Text('No tasks yet — add one above.', style: TextStyle(color: AppTheme.slate)))
                 : ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _tasks.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (ctx, i) => FadeSlideIn(
-                index: i,
-                child: AppCard(
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(_tasks[i], style: const TextStyle(fontSize: 13, color: AppTheme.ink))),
-                      IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed), onPressed: () => setState(() => _tasks.removeAt(i))),
-                    ],
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _tasks.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (ctx, i) => FadeSlideIn(
+                      index: i,
+                      child: AppCard(
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(_tasks[i], style: const TextStyle(fontSize: 13, color: AppTheme.ink))),
+                          IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed), onPressed: () => setState(() => _tasks.removeAt(i))),
+                        ],
+                      ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
           ),
         ],
       ),
@@ -1457,47 +1514,47 @@ class _WeatherDetailScreenState extends State<WeatherDetailScreen> {
                 child: KeyedSubtree(
                   key: ValueKey(state),
                   child: switch (state) {
-                    LoadState.loading => const Center(child: CircularProgressIndicator(color: AppTheme.navyPrimary)),
-                    LoadState.error => Center(
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.cloud_off, color: AppTheme.errorRed, size: 48),
-                        const SizedBox(height: 12),
-                        const Text("Couldn't load weather", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppTheme.ink)),
-                        const SizedBox(height: 4),
-                        Text(errorMessage, style: const TextStyle(fontSize: 12, color: AppTheme.slate), textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        SizedBox(width: 140, child: AppButton(label: 'Retry', onPressed: _fetch, icon: Icons.refresh)),
-                      ]),
-                    ),
-                    LoadState.success => Column(
-                      children: [
-                        AppCard(
-                          child: Column(
-                            children: [
-                              Text('${result!.temp.toInt()}°C', style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w600, color: AppTheme.ink)),
-                              Text(result!.condition, style: const TextStyle(fontSize: 14, color: AppTheme.slate)),
-                              const SizedBox(height: 12),
-                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                const Icon(Icons.air, color: AppTheme.steelAccent, size: 16),
-                                const SizedBox(width: 6),
-                                Text('${result!.wind} km/h wind', style: const TextStyle(fontSize: 12, color: AppTheme.slate)),
-                              ]),
-                            ],
-                          ),
+                LoadState.loading => const Center(child: CircularProgressIndicator(color: AppTheme.navyPrimary)),
+                LoadState.error => Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.cloud_off, color: AppTheme.errorRed, size: 48),
+                      const SizedBox(height: 12),
+                      const Text("Couldn't load weather", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppTheme.ink)),
+                      const SizedBox(height: 4),
+                      Text(errorMessage, style: const TextStyle(fontSize: 12, color: AppTheme.slate), textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      SizedBox(width: 140, child: AppButton(label: 'Retry', onPressed: _fetch, icon: Icons.refresh)),
+                    ]),
+                  ),
+                LoadState.success => Column(
+                    children: [
+                      AppCard(
+                        child: Column(
+                          children: [
+                            Text('${result!.temp.toInt()}°C', style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w600, color: AppTheme.ink)),
+                            Text(result!.condition, style: const TextStyle(fontSize: 14, color: AppTheme.slate)),
+                            const SizedBox(height: 12),
+                            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                              const Icon(Icons.air, color: AppTheme.steelAccent, size: 16),
+                              const SizedBox(width: 6),
+                              Text('${result!.wind} km/h wind', style: const TextStyle(fontSize: 12, color: AppTheme.slate)),
+                            ]),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        AppButton(
-                          label: isFav ? 'Saved to Favorites' : 'Save to Favorites',
-                          onPressed: () {
-                            widget.onToggleFavorite();
-                            setState(() => isFav = !isFav);
-                          },
-                          variant: isFav ? AppButtonVariant.secondary : AppButtonVariant.primary,
-                          icon: isFav ? Icons.star : Icons.star_border,
-                        ),
-                      ],
-                    ),
-                  },
+                      ),
+                      const SizedBox(height: 16),
+                      AppButton(
+                        label: isFav ? 'Saved to Favorites' : 'Save to Favorites',
+                        onPressed: () {
+                          widget.onToggleFavorite();
+                          setState(() => isFav = !isFav);
+                        },
+                        variant: isFav ? AppButtonVariant.secondary : AppButtonVariant.primary,
+                        icon: isFav ? Icons.star : Icons.star_border,
+                      ),
+                    ],
+                  ),
+              },
                 ),
               ),
             ),
@@ -1559,28 +1616,101 @@ class ProductListScreen extends StatelessWidget {
                 return FadeSlideIn(
                   index: index,
                   child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: AppCard(
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(color: AppTheme.steelAccent.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                          alignment: Alignment.center,
+                          child: Text('${index + 1}', style: const TextStyle(color: AppTheme.steelAccent, fontSize: 12, fontWeight: FontWeight.w600)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(product.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
+                              Text(product.category, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
+                            ],
+                          ),
+                        ),
+                        Text(product.price, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.navyPrimary)),
+                      ],
+                    ),
+                  ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SCREEN 10 — Browse Products (writes to shared state)
+// ---------------------------------------------------------------------------
+
+const _shopProducts = [
+  ('Fabric Roll', 1200),
+  ('Office Chair', 8500),
+  ('Printer Ink', 950),
+  ('Notebook Pack', 450),
+];
+
+class BrowseProductsScreen extends StatelessWidget {
+  const BrowseProductsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // context.watch rebuilds this widget whenever CartState calls
+    // notifyListeners() — that's how the badge count below stays live.
+    final cart = context.watch<CartState>();
+
+    return Scaffold(
+      body: Column(
+        children: [
+          AppTopBar(title: 'Browse Products', subtitle: '${cart.totalItems} item${cart.totalItems == 1 ? '' : 's'} in cart', showBack: true),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _shopProducts.length,
+              itemBuilder: (context, i) {
+                final (name, price) = _shopProducts[i];
+                return FadeSlideIn(
+                  index: i,
+                  child: Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: AppCard(
                       child: Row(
                         children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(color: AppTheme.steelAccent.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-                            alignment: Alignment.center,
-                            child: Text('${index + 1}', style: const TextStyle(color: AppTheme.steelAccent, fontSize: 12, fontWeight: FontWeight.w600)),
-                          ),
-                          const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(product.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
-                                Text(product.category, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
+                                Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
+                                Text('Rs $price', style: const TextStyle(fontSize: 12, color: AppTheme.slate)),
                               ],
                             ),
                           ),
-                          Text(product.price, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.navyPrimary)),
+                          IconButton(
+                            icon: const Icon(Icons.add_shopping_cart, color: AppTheme.navyPrimary, size: 20),
+                            // Writes to the SAME CartState instance the Cart
+                            // screen reads from — no data is passed between
+                            // the two screens directly, it flows through the
+                            // shared store instead.
+                            onPressed: () {
+                              context.read<CartState>().addProduct(name, price);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Added $name to cart'), backgroundColor: AppTheme.navyPrimary, duration: const Duration(milliseconds: 900)),
+                              );
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -1589,6 +1719,67 @@ class ProductListScreen extends StatelessWidget {
               },
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SCREEN 11 — Cart (reads the same shared state)
+// ---------------------------------------------------------------------------
+
+class CartScreen extends StatelessWidget {
+  const CartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cart = context.watch<CartState>();
+
+    return Scaffold(
+      body: Column(
+        children: [
+          AppTopBar(title: 'Cart', subtitle: 'Rs ${cart.totalPrice} total', showBack: true),
+          Expanded(
+            child: cart.items.isEmpty
+                ? const Center(child: Text('Cart is empty — add items from Browse Products.', style: TextStyle(color: AppTheme.slate)))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: cart.items.length,
+                    itemBuilder: (context, i) {
+                      final item = cart.items[i];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: AppCard(
+                          child: Row(
+                            children: [
+                              AppBadge(label: 'x${item.quantity}', color: AppTheme.steelAccent),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
+                                    Text('Rs ${item.price} each', style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: AppTheme.errorRed, size: 18),
+                                onPressed: () => context.read<CartState>().removeProduct(item.name),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          if (cart.items.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: AppButton(label: 'Clear Cart', onPressed: () => context.read<CartState>().clear(), variant: AppButtonVariant.secondary, icon: Icons.remove_shopping_cart),
+            ),
         ],
       ),
     );
