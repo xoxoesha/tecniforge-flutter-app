@@ -64,5 +64,5 @@ feature below is reachable — one app, one codebase, fully navigable.
 
 ## Author
 
-Esha Arooh — BSCS, COMSATS University Islamabad, Sahiwal Campus
-Supervisor: Saira Bashir
+Esha ArooJ — BSCS, COMSATS University Islamabad, Sahiwal Campus
+
