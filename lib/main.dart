@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 
 // ---------------------------------------------------------------------------
 // TecniForge — Unified app
@@ -189,6 +191,7 @@ class HomeMenuScreen extends StatelessWidget {
       _MenuItem('Browse Products', 'Shared state demo — add to cart', Icons.storefront_outlined, (ctx) => const BrowseProductsScreen()),
       _MenuItem('Cart', 'Shows the same shared state, live', Icons.shopping_cart_outlined, (ctx) => const CartScreen()),
       _MenuItem('Team Tasks', 'Fetch + toggle-update via REST API', Icons.task_alt_outlined, (ctx) => const TeamTasksScreen()),
+      _MenuItem('Business Photo', 'Camera + gallery, with permissions', Icons.camera_alt_outlined, (ctx) => const ImagePickerScreen()),
     ];
 
     return Scaffold(
@@ -1849,13 +1852,22 @@ class _TeamTasksScreenState extends State<TeamTasksScreen> {
       final res = await http.get(Uri.parse('$_url?_limit=10'));
       if (res.statusCode != 200) throw Exception('Server responded with ${res.statusCode}');
       final List data = jsonDecode(res.body);
+      // The fake API never actually persists our PATCH updates — refetching
+      // just returns its original static dataset. So we keep our own local
+      // record of which ids the user has toggled, and apply it on top of
+      // whatever the server returns, so taps don't get silently reset.
+      final prefs = await SharedPreferences.getInstance();
+      final overrides = prefs.getStringList('team_task_overrides') ?? [];
+      final overrideMap = {for (var o in overrides) int.parse(o.split(':')[0]): o.split(':')[1] == '1'};
+
       setState(() {
         tasks = List.generate(data.length, (i) {
           final json = data[i];
+          final id = json['id'] as int;
           return TeamTask(
-            id: json['id'],
-            title: i < _realisticTaskTitles.length ? _realisticTaskTitles[i] : 'Task #${json['id']}',
-            completed: json['completed'] ?? false,
+            id: id,
+            title: i < _realisticTaskTitles.length ? _realisticTaskTitles[i] : 'Task #$id',
+            completed: overrideMap[id] ?? (json['completed'] ?? false),
           );
         });
         state = LoadState.success;
@@ -1875,6 +1887,15 @@ class _TeamTasksScreenState extends State<TeamTasksScreen> {
       task.completed = !task.completed; // optimistic UI update
       _updatingIds.add(task.id);
     });
+
+    // Save locally right away — this is what actually makes the toggle
+    // "stick" when you leave and come back, since the fake API won't.
+    final prefs = await SharedPreferences.getInstance();
+    final overrides = prefs.getStringList('team_task_overrides') ?? [];
+    overrides.removeWhere((o) => o.startsWith('${task.id}:'));
+    overrides.add('${task.id}:${task.completed ? '1' : '0'}');
+    await prefs.setStringList('team_task_overrides', overrides);
+
     try {
       final res = await http.patch(
         Uri.parse('${_url}/${task.id}'),
@@ -1972,5 +1993,120 @@ class _TeamTasksScreenState extends State<TeamTasksScreen> {
           },
         );
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SCREEN 13 — Business Photo (Camera + Image Picker)
+//
+// Lets the user capture a photo with the camera or choose one from the
+// gallery. image_picker triggers Android's runtime permission prompt
+// automatically the first time each is used; we just need to catch the
+// case where the user denies it and show a clear message instead of
+// crashing or silently doing nothing.
+// ---------------------------------------------------------------------------
+
+class ImagePickerScreen extends StatefulWidget {
+  const ImagePickerScreen({super.key});
+  @override
+  State<ImagePickerScreen> createState() => _ImagePickerScreenState();
+}
+
+class _ImagePickerScreenState extends State<ImagePickerScreen> {
+  final ImagePicker _picker = ImagePicker();
+  File? _selectedImage;
+  String? _statusMessage;
+  bool _isError = false;
+
+  Future<void> _pickImage(ImageSource source) async {
+    setState(() {
+      _statusMessage = null;
+      _isError = false;
+    });
+    try {
+      final XFile? picked = await _picker.pickImage(source: source, imageQuality: 80);
+      if (picked == null) {
+        setState(() => _statusMessage = 'No image selected.');
+        return;
+      }
+      setState(() {
+        _selectedImage = File(picked.path);
+        _statusMessage = source == ImageSource.camera ? 'Photo captured.' : 'Image selected from gallery.';
+      });
+    } catch (e) {
+      setState(() {
+        _isError = true;
+        _statusMessage = 'Could not access ${source == ImageSource.camera ? 'camera' : 'gallery'}. '
+            'Please check app permissions in your device Settings.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          const AppTopBar(title: 'Business Photo', subtitle: 'Attach a photo of a receipt or product'),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 240,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      border: Border.all(color: AppTheme.cardBorder),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _selectedImage != null
+                        ? Image.file(_selectedImage!, fit: BoxFit.cover)
+                        : const Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.image_outlined, size: 48, color: Color(0xFFC4CAD6)),
+                                SizedBox(height: 8),
+                                Text('No image selected yet', style: TextStyle(color: AppTheme.slate, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                  ),
+                  if (_statusMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(_isError ? Icons.error_outline : Icons.check_circle, size: 16, color: _isError ? AppTheme.errorRed : AppTheme.successGreen),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(_statusMessage!, style: TextStyle(fontSize: 12, color: _isError ? AppTheme.errorRed : AppTheme.successGreen))),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  AppButton(label: 'Take Photo', onPressed: () => _pickImage(ImageSource.camera), icon: Icons.camera_alt),
+                  const SizedBox(height: 10),
+                  AppButton(label: 'Choose from Gallery', onPressed: () => _pickImage(ImageSource.gallery), variant: AppButtonVariant.secondary, icon: Icons.photo_library_outlined),
+                  if (_selectedImage != null) ...[
+                    const SizedBox(height: 10),
+                    AppButton(
+                      label: 'Remove Photo',
+                      onPressed: () => setState(() {
+                        _selectedImage = null;
+                        _statusMessage = null;
+                      }),
+                      variant: AppButtonVariant.danger,
+                      icon: Icons.delete_outline,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
