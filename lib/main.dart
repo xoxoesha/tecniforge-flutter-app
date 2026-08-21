@@ -2018,6 +2018,35 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   String? _statusMessage;
   bool _isError = false;
 
+  static const _prefsKey = 'business_photo_path';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedImage();
+  }
+
+  // Restores the previously saved photo (if any) when the screen opens —
+  // same idea as the Business Notes screen, but storing a file path instead
+  // of plain text.
+  Future<void> _loadSavedImage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedPath = prefs.getString(_prefsKey);
+    if (savedPath != null && await File(savedPath).exists()) {
+      setState(() => _selectedImage = File(savedPath));
+    }
+  }
+
+  Future<void> _saveImagePath(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKey, path);
+  }
+
+  Future<void> _clearSavedImage() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsKey);
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     setState(() {
       _statusMessage = null;
@@ -2029,9 +2058,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         setState(() => _statusMessage = 'No image selected.');
         return;
       }
+      await _saveImagePath(picked.path); // persists immediately on pick
       setState(() {
         _selectedImage = File(picked.path);
-        _statusMessage = source == ImageSource.camera ? 'Photo captured.' : 'Image selected from gallery.';
+        _statusMessage = source == ImageSource.camera
+            ? 'Photo captured and saved.'
+            : 'Image selected and saved.';
       });
     } catch (e) {
       setState(() {
@@ -2040,6 +2072,15 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
             'Please check app permissions in your device Settings.';
       });
     }
+  }
+
+  Future<void> _removeImage() async {
+    await _clearSavedImage();
+    setState(() {
+      _selectedImage = null;
+      _statusMessage = 'Photo removed.';
+      _isError = false;
+    });
   }
 
   @override
@@ -2093,10 +2134,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                     const SizedBox(height: 10),
                     AppButton(
                       label: 'Remove Photo',
-                      onPressed: () => setState(() {
-                        _selectedImage = null;
-                        _statusMessage = null;
-                      }),
+                      onPressed: _removeImage,
                       variant: AppButtonVariant.danger,
                       icon: Icons.delete_outline,
                     ),
