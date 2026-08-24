@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 // ---------------------------------------------------------------------------
 // TecniForge — Unified app
@@ -31,11 +32,58 @@ class AppTheme {
   static const radiusSm = 10.0;
   static const radiusMd = 14.0;
 
-  static ThemeData get themeData => ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: canvas,
-        colorScheme: ColorScheme.fromSeed(seedColor: navyPrimary, primary: navyPrimary, error: errorRed),
-      );
+  static ThemeData get lightTheme => ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.light,
+    scaffoldBackgroundColor: canvas,
+    colorScheme: ColorScheme.fromSeed(seedColor: navyPrimary, brightness: Brightness.light, primary: navyPrimary, error: errorRed),
+    cardColor: Colors.white,
+    dividerColor: cardBorder,
+  );
+
+  static ThemeData get darkTheme => ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: const Color(0xFF10141C),
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: steelAccent,
+      brightness: Brightness.dark,
+      primary: const Color(0xFF7FA8E8),
+      secondary: forgeAmber,
+      surface: const Color(0xFF171D27),
+      error: const Color(0xFFFF6B5E),
+    ),
+    cardColor: const Color(0xFF171D27),
+    dividerColor: const Color(0xFF2B3442),
+  );
+
+  static ThemeData get themeData => lightTheme;
+}
+
+class ThemeController extends ChangeNotifier {
+  static const _prefsKey = 'app_theme_mode';
+  ThemeMode _mode = ThemeMode.light;
+  ThemeMode get mode => _mode;
+  bool get isDark => _mode == ThemeMode.dark;
+
+  ThemeController() { _load(); }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getString(_prefsKey) == 'dark') {
+      _mode = ThemeMode.dark;
+      notifyListeners();
+    }
+  }
+
+  Future<void> setMode(ThemeMode mode) async {
+    _mode = mode;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKey, mode == ThemeMode.dark ? 'dark' : 'light');
+  }
+
+  Future<void> toggle() => setMode(isDark ? ThemeMode.light : ThemeMode.dark);
 }
 
 final FlutterLocalNotificationsPlugin notificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -79,7 +127,7 @@ class CartState extends ChangeNotifier {
       _items.add(CartItem(name: name, price: price));
     }
     notifyListeners(); // tells every listening widget to rebuild — this is
-                        // the "update propagates everywhere" part of Context/Redux
+    // the "update propagates everywhere" part of Context/Redux
   }
 
   void removeProduct(String name) {
@@ -99,8 +147,11 @@ void main() async {
   runApp(
     // ChangeNotifierProvider makes CartState reachable from every screen
     // below it in the widget tree — the "store" that Redux/Context provide.
-    ChangeNotifierProvider(
-      create: (_) => CartState(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => CartState()),
+        ChangeNotifierProvider(create: (_) => ThemeController()),
+      ],
       child: const TecniForgeApp(),
     ),
   );
@@ -113,7 +164,9 @@ class TecniForgeApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'TecniForge',
-      theme: AppTheme.themeData,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: context.watch<ThemeController>().mode,
       home: const SplashScreen(),
     );
   }
@@ -182,6 +235,7 @@ class HomeMenuScreen extends StatelessWidget {
       _MenuItem('Clients (CRUD)', 'Create, read, update, delete via REST API', Icons.people_outline, (ctx) => const ClientListScreen()),
       _MenuItem('New Client Form', 'Validated form (name, email, phone...)', Icons.assignment_outlined, (ctx) => const ClientFormScreen()),
       _MenuItem('Component Library', 'Reusable buttons, cards, badges, fields', Icons.widgets_outlined, (ctx) => const ComponentDemoScreen()),
+      _MenuItem('App Theme', 'Switch between light and dark mode', Icons.dark_mode_outlined, (ctx) => const ThemeSettingsScreen()),
       _MenuItem('Notifications', 'Schedule local reminder notifications', Icons.notifications_outlined, (ctx) => const NotificationsScreen()),
       _MenuItem('Business Dashboard', 'Dashboard, Tasks, Profile — bottom nav', Icons.dashboard_outlined, (ctx) => const BusinessDashboardScreen()),
       _MenuItem('Task List', 'Add/remove tasks with validation', Icons.checklist_outlined, (ctx) => const TaskListScreen()),
@@ -342,7 +396,7 @@ class AppCard extends StatelessWidget {
     final card = Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(AppTheme.radiusMd), border: Border.all(color: Theme.of(context).dividerColor)),
       child: child,
     );
     if (onTap == null) return card;
@@ -386,12 +440,12 @@ class _AppButtonState extends State<AppButton> {
   Widget build(BuildContext context) {
     final bg = switch (widget.variant) {
       AppButtonVariant.primary => AppTheme.navyPrimary,
-      AppButtonVariant.secondary => Colors.white,
+      AppButtonVariant.secondary => Theme.of(context).colorScheme.surface,
       AppButtonVariant.danger => AppTheme.errorRed.withOpacity(0.1),
     };
     final fg = switch (widget.variant) {
       AppButtonVariant.primary => Colors.white,
-      AppButtonVariant.secondary => AppTheme.ink,
+      AppButtonVariant.secondary => Theme.of(context).colorScheme.onSurface,
       AppButtonVariant.danger => AppTheme.errorRed,
     };
 
@@ -413,7 +467,7 @@ class _AppButtonState extends State<AppButton> {
             style: ElevatedButton.styleFrom(
               backgroundColor: bg,
               elevation: widget.variant == AppButtonVariant.secondary ? 0 : 1,
-              side: widget.variant == AppButtonVariant.secondary ? const BorderSide(color: AppTheme.cardBorder) : null,
+              side: widget.variant == AppButtonVariant.secondary ? BorderSide(color: Theme.of(context).dividerColor) : null,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusSm)),
             ),
             child: Row(
@@ -466,14 +520,75 @@ class AppTextField extends StatelessWidget {
             hintText: hint,
             prefixIcon: icon != null ? Icon(icon, size: 18, color: AppTheme.slate) : null,
             filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppTheme.radiusSm), borderSide: const BorderSide(color: AppTheme.cardBorder)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppTheme.radiusSm), borderSide: const BorderSide(color: AppTheme.cardBorder)),
+            fillColor: Theme.of(context).colorScheme.surface,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppTheme.radiusSm), borderSide: BorderSide(color: Theme.of(context).dividerColor)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppTheme.radiusSm), borderSide: BorderSide(color: Theme.of(context).dividerColor)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppTheme.radiusSm), borderSide: const BorderSide(color: AppTheme.navyPrimary, width: 1.5)),
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           ),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// THEME SETTINGS — dynamic light/dark mode
+// ---------------------------------------------------------------------------
+
+class ThemeSettingsScreen extends StatelessWidget {
+  const ThemeSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<ThemeController>();
+    final isDark = controller.isDark;
+    final colors = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      body: Column(
+        children: [
+          const AppTopBar(title: 'App Theme', subtitle: 'Choose your preferred appearance', showBack: true),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(isDark ? Icons.dark_mode : Icons.light_mode, color: AppTheme.forgeAmber, size: 28),
+                      const SizedBox(height: 12),
+                      Text('Appearance', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: colors.onSurface)),
+                      const SizedBox(height: 6),
+                      Text('Switch the complete app between light and dark mode. The change is applied immediately across all screens.', style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
+                      const SizedBox(height: 16),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(isDark ? 'Dark mode' : 'Light mode'),
+                        subtitle: Text(isDark ? 'Dark colors are active' : 'Light colors are active'),
+                        secondary: Icon(isDark ? Icons.nightlight_round : Icons.wb_sunny_outlined),
+                        value: isDark,
+                        onChanged: (_) => controller.toggle(),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                AppCard(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_outline, color: AppTheme.successGreen, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text('Your selected theme is saved locally and will be restored when the app is opened again.', style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -661,21 +776,21 @@ class _ClientListScreenState extends State<ClientListScreen> {
             return FadeSlideIn(
               index: i,
               child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: AppCard(
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(c.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
-                        if (c.body.isNotEmpty) Text(c.body, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppTheme.slate)),
-                      ]),
-                    ),
-                    IconButton(icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.slate), onPressed: () => _openForm(existing: c)),
-                    IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed), onPressed: () => _delete(c)),
-                  ],
+                padding: const EdgeInsets.only(bottom: 8),
+                child: AppCard(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(c.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
+                          if (c.body.isNotEmpty) Text(c.body, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppTheme.slate)),
+                        ]),
+                      ),
+                      IconButton(icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.slate), onPressed: () => _openForm(existing: c)),
+                      IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed), onPressed: () => _delete(c)),
+                    ],
+                  ),
                 ),
-              ),
               ),
             );
           },
@@ -888,14 +1003,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   static const _channelName = 'Reminders';
 
   NotificationDetails get _details => const NotificationDetails(
-        android: AndroidNotificationDetails(
-          _channelId,
-          _channelName,
-          channelDescription: 'Scheduled reminders from TecniForge',
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-      );
+    android: AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: 'Scheduled reminders from TecniForge',
+      importance: Importance.high,
+      priority: Priority.high,
+    ),
+  );
 
   Future<void> _sendNow() async {
     await notificationsPlugin.show(
@@ -1059,33 +1174,33 @@ class _DashTab extends StatelessWidget {
   }
 
   Widget _statCard(String label, String value, String delta) => AppCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.ink)),
+        const SizedBox(height: 4),
+        Text(delta, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.successGreen)),
+      ],
+    ),
+  );
+
+  Widget _activityRow(String name, String time, Color color) => Row(
+    children: [
+      Icon(Icons.check_circle, color: color, size: 16),
+      const SizedBox(width: 12),
+      Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
-            const SizedBox(height: 4),
-            Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.ink)),
-            const SizedBox(height: 4),
-            Text(delta, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.successGreen)),
+            Text(name, style: const TextStyle(fontSize: 13, color: AppTheme.ink)),
+            Text(time, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
           ],
         ),
-      );
-
-  Widget _activityRow(String name, String time, Color color) => Row(
-        children: [
-          Icon(Icons.check_circle, color: color, size: 16),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontSize: 13, color: AppTheme.ink)),
-                Text(time, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
-              ],
-            ),
-          ),
-        ],
-      );
+      ),
+    ],
+  );
 }
 
 class _TasksTab extends StatefulWidget {
@@ -1237,21 +1352,21 @@ class _TaskListScreenState extends State<TaskListScreen> {
             child: _tasks.isEmpty
                 ? const Center(child: Text('No tasks yet — add one above.', style: TextStyle(color: AppTheme.slate)))
                 : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _tasks.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (ctx, i) => FadeSlideIn(
-                      index: i,
-                      child: AppCard(
-                      child: Row(
-                        children: [
-                          Expanded(child: Text(_tasks[i], style: const TextStyle(fontSize: 13, color: AppTheme.ink))),
-                          IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed), onPressed: () => setState(() => _tasks.removeAt(i))),
-                        ],
-                      ),
-                      ),
-                    ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _tasks.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (ctx, i) => FadeSlideIn(
+                index: i,
+                child: AppCard(
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(_tasks[i], style: const TextStyle(fontSize: 13, color: AppTheme.ink))),
+                      IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed), onPressed: () => setState(() => _tasks.removeAt(i))),
+                    ],
                   ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1518,47 +1633,47 @@ class _WeatherDetailScreenState extends State<WeatherDetailScreen> {
                 child: KeyedSubtree(
                   key: ValueKey(state),
                   child: switch (state) {
-                LoadState.loading => const Center(child: CircularProgressIndicator(color: AppTheme.navyPrimary)),
-                LoadState.error => Center(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.cloud_off, color: AppTheme.errorRed, size: 48),
-                      const SizedBox(height: 12),
-                      const Text("Couldn't load weather", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppTheme.ink)),
-                      const SizedBox(height: 4),
-                      Text(errorMessage, style: const TextStyle(fontSize: 12, color: AppTheme.slate), textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      SizedBox(width: 140, child: AppButton(label: 'Retry', onPressed: _fetch, icon: Icons.refresh)),
-                    ]),
-                  ),
-                LoadState.success => Column(
-                    children: [
-                      AppCard(
-                        child: Column(
-                          children: [
-                            Text('${result!.temp.toInt()}°C', style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w600, color: AppTheme.ink)),
-                            Text(result!.condition, style: const TextStyle(fontSize: 14, color: AppTheme.slate)),
-                            const SizedBox(height: 12),
-                            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                              const Icon(Icons.air, color: AppTheme.steelAccent, size: 16),
-                              const SizedBox(width: 6),
-                              Text('${result!.wind} km/h wind', style: const TextStyle(fontSize: 12, color: AppTheme.slate)),
-                            ]),
-                          ],
+                    LoadState.loading => const Center(child: CircularProgressIndicator(color: AppTheme.navyPrimary)),
+                    LoadState.error => Center(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.cloud_off, color: AppTheme.errorRed, size: 48),
+                        const SizedBox(height: 12),
+                        const Text("Couldn't load weather", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppTheme.ink)),
+                        const SizedBox(height: 4),
+                        Text(errorMessage, style: const TextStyle(fontSize: 12, color: AppTheme.slate), textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        SizedBox(width: 140, child: AppButton(label: 'Retry', onPressed: _fetch, icon: Icons.refresh)),
+                      ]),
+                    ),
+                    LoadState.success => Column(
+                      children: [
+                        AppCard(
+                          child: Column(
+                            children: [
+                              Text('${result!.temp.toInt()}°C', style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w600, color: AppTheme.ink)),
+                              Text(result!.condition, style: const TextStyle(fontSize: 14, color: AppTheme.slate)),
+                              const SizedBox(height: 12),
+                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                const Icon(Icons.air, color: AppTheme.steelAccent, size: 16),
+                                const SizedBox(width: 6),
+                                Text('${result!.wind} km/h wind', style: const TextStyle(fontSize: 12, color: AppTheme.slate)),
+                              ]),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      AppButton(
-                        label: isFav ? 'Saved to Favorites' : 'Save to Favorites',
-                        onPressed: () {
-                          widget.onToggleFavorite();
-                          setState(() => isFav = !isFav);
-                        },
-                        variant: isFav ? AppButtonVariant.secondary : AppButtonVariant.primary,
-                        icon: isFav ? Icons.star : Icons.star_border,
-                      ),
-                    ],
-                  ),
-              },
+                        const SizedBox(height: 16),
+                        AppButton(
+                          label: isFav ? 'Saved to Favorites' : 'Save to Favorites',
+                          onPressed: () {
+                            widget.onToggleFavorite();
+                            setState(() => isFav = !isFav);
+                          },
+                          variant: isFav ? AppButtonVariant.secondary : AppButtonVariant.primary,
+                          icon: isFav ? Icons.star : Icons.star_border,
+                        ),
+                      ],
+                    ),
+                  },
                 ),
               ),
             ),
@@ -1620,31 +1735,31 @@ class ProductListScreen extends StatelessWidget {
                 return FadeSlideIn(
                   index: index,
                   child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: AppCard(
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(color: AppTheme.steelAccent.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-                          alignment: Alignment.center,
-                          child: Text('${index + 1}', style: const TextStyle(color: AppTheme.steelAccent, fontSize: 12, fontWeight: FontWeight.w600)),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(product.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
-                              Text(product.category, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
-                            ],
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: AppCard(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(color: AppTheme.steelAccent.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                            alignment: Alignment.center,
+                            child: Text('${index + 1}', style: const TextStyle(color: AppTheme.steelAccent, fontSize: 12, fontWeight: FontWeight.w600)),
                           ),
-                        ),
-                        Text(product.price, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.navyPrimary)),
-                      ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(product.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
+                                Text(product.category, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
+                              ],
+                            ),
+                          ),
+                          Text(product.price, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.navyPrimary)),
+                        ],
+                      ),
                     ),
-                  ),
                   ),
                 );
               },
@@ -1748,36 +1863,36 @@ class CartScreen extends StatelessWidget {
             child: cart.items.isEmpty
                 ? const Center(child: Text('Cart is empty — add items from Browse Products.', style: TextStyle(color: AppTheme.slate)))
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: cart.items.length,
-                    itemBuilder: (context, i) {
-                      final item = cart.items[i];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: AppCard(
-                          child: Row(
+              padding: const EdgeInsets.all(16),
+              itemCount: cart.items.length,
+              itemBuilder: (context, i) {
+                final item = cart.items[i];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: AppCard(
+                    child: Row(
+                      children: [
+                        AppBadge(label: 'x${item.quantity}', color: AppTheme.steelAccent),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              AppBadge(label: 'x${item.quantity}', color: AppTheme.steelAccent),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(item.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
-                                    Text('Rs ${item.price} each', style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: AppTheme.errorRed, size: 18),
-                                onPressed: () => context.read<CartState>().removeProduct(item.name),
-                              ),
+                              Text(item.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.ink)),
+                              Text('Rs ${item.price} each', style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
                             ],
                           ),
                         ),
-                      );
-                    },
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: AppTheme.errorRed, size: 18),
+                          onPressed: () => context.read<CartState>().removeProduct(item.name),
+                        ),
+                      ],
+                    ),
                   ),
+                );
+              },
+            ),
           ),
           if (cart.items.isNotEmpty)
             Padding(
@@ -1970,10 +2085,10 @@ class _TeamTasksScreenState extends State<TeamTasksScreen> {
                       isUpdating
                           ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.navyPrimary))
                           : Checkbox(
-                              value: task.completed,
-                              activeColor: AppTheme.navyPrimary,
-                              onChanged: (_) => _toggle(task),
-                            ),
+                        value: task.completed,
+                        activeColor: AppTheme.navyPrimary,
+                        onChanged: (_) => _toggle(task),
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -2058,9 +2173,17 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         setState(() => _statusMessage = 'No image selected.');
         return;
       }
-      await _saveImagePath(picked.path); // persists immediately on pick
+      // image_picker's own path points into a temporary cache directory
+      // that Android can clear at any time — copying it into the app's
+      // permanent documents directory is what actually makes it stick
+      // around, not just saving the raw picked path.
+      final docsDir = await getApplicationDocumentsDirectory();
+      final permanentPath = '${docsDir.path}/business_photo.jpg';
+      final savedFile = await File(picked.path).copy(permanentPath);
+
+      await _saveImagePath(savedFile.path);
       setState(() {
-        _selectedImage = File(picked.path);
+        _selectedImage = savedFile;
         _statusMessage = source == ImageSource.camera
             ? 'Photo captured and saved.'
             : 'Image selected and saved.';
@@ -2088,7 +2211,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     return Scaffold(
       body: Column(
         children: [
-          const AppTopBar(title: 'Business Photo', subtitle: 'Attach a photo of a receipt or product'),
+          const AppTopBar(title: 'Business Photo', subtitle: 'Attach a photo of a receipt or product', showBack: true),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
@@ -2106,15 +2229,15 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                     child: _selectedImage != null
                         ? Image.file(_selectedImage!, fit: BoxFit.cover)
                         : const Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.image_outlined, size: 48, color: Color(0xFFC4CAD6)),
-                                SizedBox(height: 8),
-                                Text('No image selected yet', style: TextStyle(color: AppTheme.slate, fontSize: 12)),
-                              ],
-                            ),
-                          ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.image_outlined, size: 48, color: Color(0xFFC4CAD6)),
+                          SizedBox(height: 8),
+                          Text('No image selected yet', style: TextStyle(color: AppTheme.slate, fontSize: 12)),
+                        ],
+                      ),
+                    ),
                   ),
                   if (_statusMessage != null) ...[
                     const SizedBox(height: 12),
@@ -2148,3 +2271,4 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     );
   }
 }
+
