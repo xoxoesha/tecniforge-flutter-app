@@ -225,63 +225,493 @@ class _SplashScreenState extends State<SplashScreen> {
 // ---------------------------------------------------------------------------
 // HOME MENU — the starting point. Each row navigates (pushes) to one screen.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// HOME DASHBOARD — FINAL POLISHED MINI APP
+// ---------------------------------------------------------------------------
 
 class HomeMenuScreen extends StatelessWidget {
   const HomeMenuScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     final items = [
-      _MenuItem('Clients (CRUD)', 'Create, read, update, delete via REST API', Icons.people_outline, (ctx) => const ClientListScreen()),
-      _MenuItem('New Client Form', 'Validated form (name, email, phone...)', Icons.assignment_outlined, (ctx) => const ClientFormScreen()),
-      _MenuItem('Component Library', 'Reusable buttons, cards, badges, fields', Icons.widgets_outlined, (ctx) => const ComponentDemoScreen()),
-      _MenuItem('App Theme', 'Switch between light and dark mode', Icons.dark_mode_outlined, (ctx) => const ThemeSettingsScreen()),
-      _MenuItem('Notifications', 'Schedule local reminder notifications', Icons.notifications_outlined, (ctx) => const NotificationsScreen()),
-      _MenuItem('Business Dashboard', 'Dashboard, Tasks, Profile — bottom nav', Icons.dashboard_outlined, (ctx) => const BusinessDashboardScreen()),
-      _MenuItem('Task List', 'Add/remove tasks with validation', Icons.checklist_outlined, (ctx) => const TaskListScreen()),
-      _MenuItem('Business Notes', 'Local storage — survives app restart', Icons.save_outlined, (ctx) => const LocalStorageScreen()),
-      _MenuItem('Weather', 'API + navigation + saved favorites', Icons.wb_sunny_outlined, (ctx) => const WeatherCitiesScreen()),
-      _MenuItem('Product List', 'Efficient scrolling list (FlatList equivalent)', Icons.list_alt_outlined, (ctx) => const ProductListScreen()),
-      _MenuItem('Browse Products', 'Shared state demo — add to cart', Icons.storefront_outlined, (ctx) => const BrowseProductsScreen()),
-      _MenuItem('Cart', 'Shows the same shared state, live', Icons.shopping_cart_outlined, (ctx) => const CartScreen()),
-      _MenuItem('Team Tasks', 'Fetch + toggle-update via REST API', Icons.task_alt_outlined, (ctx) => const TeamTasksScreen()),
-      _MenuItem('Business Photo', 'Camera + gallery, with permissions', Icons.camera_alt_outlined, (ctx) => const ImagePickerScreen()),
+      _MenuItem(
+        'Clients',
+        'REST API • CRUD operations',
+        Icons.people_outline,
+            (ctx) => const ClientListScreen(),
+        AppTheme.steelAccent,
+      ),
+      _MenuItem(
+        'New Client',
+        'Validated client registration',
+        Icons.person_add_alt_1_outlined,
+            (ctx) => const ClientFormScreen(),
+        AppTheme.successGreen,
+      ),
+      _MenuItem(
+        'Business Dashboard',
+        'Tasks, profile & overview',
+        Icons.dashboard_outlined,
+            (ctx) => const BusinessDashboardScreen(),
+        AppTheme.forgeAmber,
+      ),
+      _MenuItem(
+        'Task List',
+        'Create and manage tasks',
+        Icons.checklist_outlined,
+            (ctx) => const TaskListScreen(),
+        AppTheme.successGreen,
+      ),
+      _MenuItem(
+        'Team Tasks',
+        'REST API task management',
+        Icons.groups_outlined,
+            (ctx) => const TeamTasksScreen(),
+        AppTheme.steelAccent,
+      ),
+      _MenuItem(
+        'Products',
+        'Efficient product browsing',
+        Icons.list_alt_outlined,
+            (ctx) => const ProductListScreen(),
+        AppTheme.forgeAmber,
+      ),
+      _MenuItem(
+        'Browse & Cart',
+        'Products with shared cart state',
+        Icons.shopping_cart_outlined,
+            (ctx) => const BrowseProductsScreen(),
+        AppTheme.steelAccent,
+      ),
+      _MenuItem(
+        'Cart',
+        'View your current cart',
+        Icons.shopping_bag_outlined,
+            (ctx) => const CartScreen(),
+        AppTheme.successGreen,
+      ),
+      _MenuItem(
+        'Weather',
+        'API, navigation & favorites',
+        Icons.wb_sunny_outlined,
+            (ctx) => const WeatherCitiesScreen(),
+        AppTheme.forgeAmber,
+      ),
+      _MenuItem(
+        'Business Notes',
+        'Notes saved locally',
+        Icons.sticky_note_2_outlined,
+            (ctx) => const LocalStorageScreen(),
+        AppTheme.successGreen,
+      ),
+      _MenuItem(
+        'Notifications',
+        'Immediate & scheduled reminders',
+        Icons.notifications_outlined,
+            (ctx) => const NotificationsScreen(),
+        AppTheme.steelAccent,
+      ),
+      _MenuItem(
+        'Business Photo',
+        'Camera & gallery integration',
+        Icons.camera_alt_outlined,
+            (ctx) => const ImagePickerScreen(),
+        AppTheme.forgeAmber,
+      ),
+      _MenuItem(
+        'Component Library',
+        'Reusable UI components',
+        Icons.widgets_outlined,
+            (ctx) => const ComponentDemoScreen(),
+        AppTheme.successGreen,
+      ),
+      _MenuItem(
+        'App Theme',
+        'Light & dark mode',
+        Icons.dark_mode_outlined,
+            (ctx) => const ThemeSettingsScreen(),
+        AppTheme.steelAccent,
+      ),
     ];
 
     return Scaffold(
-      body: Column(
-        children: [
-          const AppTopBar(title: 'TecniForge', subtitle: 'Pick a screen to open'),
-          Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (ctx, i) {
-                final item = items[i];
-                return FadeSlideIn(
-                  index: i,
-                  child: AppCard(
-                    onTap: () => Navigator.push(context, animatedRoute(item.builder(context))),
-                    child: Row(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: SafeArea(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // ===============================================================
+            // HERO HEADER
+            // ===============================================================
+            SliverToBoxAdapter(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+                decoration: const BoxDecoration(
+                  color: AppTheme.navyDeep,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(28),
+                    bottomRight: Radius.circular(28),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Icon(item.icon, color: AppTheme.steelAccent, size: 22),
-                        const SizedBox(width: 14),
-                        Expanded(
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: AppTheme.forgeAmber,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Text(
+                            'TF',
+                            style: TextStyle(
+                              color: AppTheme.navyDeep,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(width: 12),
+
+                        const Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(item.title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.ink)),
-                              Text(item.subtitle, style: const TextStyle(fontSize: 11, color: AppTheme.slate)),
+                              Text(
+                                'TECNIFORGE',
+                                style: TextStyle(
+                                  color: AppTheme.forgeAmber,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 2,
+                                ),
+                              ),
+                              SizedBox(height: 3),
+                              Text(
+                                'Business Autopilot',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_right, color: Color(0xFFC4CAD6)),
+
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.10),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            tooltip: 'Theme',
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                animatedRoute(
+                                  const ThemeSettingsScreen(),
+                                ),
+                              );
+                            },
+                            icon: Icon(
+                              isDark
+                                  ? Icons.dark_mode_rounded
+                                  : Icons.light_mode_outlined,
+                              color: AppTheme.forgeAmber,
+                              size: 21,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
+
+                    const SizedBox(height: 28),
+
+                    const Text(
+                      'Welcome back 👋',
+                      style: TextStyle(
+                        color: Color(0xFF9FB0CC),
+                        fontSize: 13,
+                      ),
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    const Text(
+                      'Everything you need,\nin one place.',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 27,
+                        height: 1.15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    const Text(
+                      'A unified workspace for managing clients, tasks, products, notes and business tools.',
+                      style: TextStyle(
+                        color: Color(0xFFB8C5D9),
+                        fontSize: 12,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ===============================================================
+            // STATS
+            // ===============================================================
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _HomeStatCard(
+                        icon: Icons.apps_outlined,
+                        value: '14',
+                        label: 'Features',
+                        color: AppTheme.steelAccent,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _HomeStatCard(
+                        icon: Icons.phone_android_outlined,
+                        value: '1',
+                        label: 'Unified App',
+                        color: AppTheme.forgeAmber,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _HomeStatCard(
+                        icon: Icons.verified_outlined,
+                        value: 'Ready',
+                        label: 'Status',
+                        color: AppTheme.successGreen,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ===============================================================
+            // SECTION TITLE
+            // ===============================================================
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Explore features',
+                        style: TextStyle(
+                          color: colors.onSurface,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${items.length} available',
+                      style: TextStyle(
+                        color: colors.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ===============================================================
+            // FEATURE GRID
+            // ===============================================================
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              sliver: SliverGrid(
+                delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                    final item = items[index];
+
+                    return FadeSlideIn(
+                      index: index,
+                      child: _HomeFeatureCard(
+                        item: item,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            animatedRoute(
+                              item.builder(context),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                  childCount: items.length,
+                ),
+                gridDelegate:
+                const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.12,
+                ),
+              ),
+            ),
+
+            // ===============================================================
+            // FINAL STATUS CARD
+            // ===============================================================
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 30),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: colors.outlineVariant,
+                    ),
                   ),
-                );
-              },
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: AppTheme.successGreen.withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check_circle_outline,
+                          color: AppTheme.successGreen,
+                          size: 22,
+                        ),
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Mini app ready',
+                              style: TextStyle(
+                                color: colors.onSurface,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Weekly features integrated into one polished Flutter application.',
+                              style: TextStyle(
+                                color: colors.onSurfaceVariant,
+                                fontSize: 11,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const Icon(
+                        Icons.verified_rounded,
+                        color: AppTheme.successGreen,
+                        size: 21,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// HOME STAT CARD
+// ---------------------------------------------------------------------------
+
+class _HomeStatCard extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final Color color;
+
+  const _HomeStatCard({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: colors.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            color: color,
+            size: 19,
+          ),
+          const SizedBox(height: 9),
+          Text(
+            value,
+            style: TextStyle(
+              color: colors.onSurface,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: colors.onSurfaceVariant,
+              fontSize: 10,
             ),
           ),
         ],
@@ -290,12 +720,272 @@ class HomeMenuScreen extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// HOME FEATURE CARD
+// ---------------------------------------------------------------------------
+
+class _HomeFeatureCard extends StatelessWidget {
+  final _MenuItem item;
+  final VoidCallback onTap;
+
+  const _HomeFeatureCard({
+    required this.item,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Material(
+      color: colors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colors.outlineVariant,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: item.color.withOpacity(0.11),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(
+                      item.icon,
+                      color: item.color,
+                      size: 20,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: colors.onSurfaceVariant,
+                    size: 11,
+                  ),
+                ],
+              ),
+
+              const Spacer(),
+
+              Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors.onSurface,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+
+              const SizedBox(height: 4),
+
+              Text(
+                item.subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors.onSurfaceVariant,
+                  fontSize: 10,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MENU ITEM MODEL
+// ---------------------------------------------------------------------------
+
 class _MenuItem {
-  final String title, subtitle;
+  final String title;
+  final String subtitle;
   final IconData icon;
   final Widget Function(BuildContext) builder;
-  _MenuItem(this.title, this.subtitle, this.icon, this.builder);
+  final Color color;
+
+  const _MenuItem(
+      this.title,
+      this.subtitle,
+      this.icon,
+      this.builder,
+      this.color,
+      );
 }
+
+// ---------------------------------------------------------------------------
+// DASHBOARD STAT CARD
+// ---------------------------------------------------------------------------
+
+class _DashboardStat extends StatelessWidget {
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _DashboardStat({
+    required this.value,
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: colors.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 19,
+            color: color,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: TextStyle(
+              color: colors.onSurface,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: colors.onSurfaceVariant,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// FEATURE CARD
+// ---------------------------------------------------------------------------
+
+class _DashboardFeatureCard extends StatelessWidget {
+  final _MenuItem item;
+  final VoidCallback onTap;
+
+  const _DashboardFeatureCard({
+    required this.item,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Material(
+      color: colors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colors.outlineVariant,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: item.color.withOpacity(0.11),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      item.icon,
+                      color: item.color,
+                      size: 21,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 12,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ],
+              ),
+
+              const Spacer(),
+
+              Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors.onSurface,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+
+              const SizedBox(height: 4),
+
+              Text(
+                item.subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors.onSurfaceVariant,
+                  fontSize: 10,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
 
 // ---------------------------------------------------------------------------
 // ANIMATION HELPERS — used across the app for a consistent, polished feel.
