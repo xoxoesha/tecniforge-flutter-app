@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/cart_state.dart';
 import 'services/notifications_service.dart';
+import 'services/push_notifications_service.dart';
 import 'screens/splash_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -18,6 +19,7 @@ import 'theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initNotifications();
+  await initPushNotifications();
   runApp(
     // ChangeNotifierProvider makes CartState/ThemeController reachable from
     // every screen below it in the widget tree — the "store" that
