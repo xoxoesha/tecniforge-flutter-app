@@ -218,9 +218,9 @@ class _FilterChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? AppTheme.navyPrimary : AppTheme.surface,
+          color: selected ? AppTheme.navyPrimary : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(50),
-          border: Border.all(color: selected ? AppTheme.navyPrimary : AppTheme.cardBorder),
+          border: Border.all(color: selected ? AppTheme.navyPrimary : Theme.of(context).dividerColor),
         ),
         child: Text(
           label,
