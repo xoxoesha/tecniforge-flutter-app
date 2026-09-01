@@ -21,6 +21,40 @@ class TeamTask {
   TeamTask({required this.id, required this.title, required this.completed});
 }
 
+// LocalTask — backs the on-device SQLite-persisted Task List screen (see
+// services/task_db_service.dart). Unlike TeamTask (fetched from a REST API),
+// these rows live only in the local database and survive app restarts.
+class LocalTask {
+  final int? id;
+  final String title;
+  final bool completed;
+  final DateTime createdAt;
+
+  LocalTask({this.id, required this.title, this.completed = false, required this.createdAt});
+
+  // Converts a row to the Map<String, Object?> sqflite expects for insert/update.
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'title': title,
+        'completed': completed ? 1 : 0,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory LocalTask.fromMap(Map<String, Object?> m) => LocalTask(
+        id: m['id'] as int?,
+        title: m['title'] as String,
+        completed: (m['completed'] as int) == 1,
+        createdAt: DateTime.parse(m['createdAt'] as String),
+      );
+
+  LocalTask copyWith({bool? completed}) => LocalTask(
+        id: id,
+        title: title,
+        completed: completed ?? this.completed,
+        createdAt: createdAt,
+      );
+}
+
 class Product {
   final String name;
   final String category;
