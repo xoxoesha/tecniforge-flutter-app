@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+key.properties
+app/google-services.json
+tecniforge-release-key.jks
