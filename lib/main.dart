@@ -4,6 +4,7 @@ import 'services/cart_state.dart';
 import 'services/notifications_service.dart';
 import 'services/push_notifications_service.dart';
 import 'screens/splash_screen.dart';
+import 'screens/notifications_screen.dart';
 import 'theme/app_theme.dart';
 
 // ---------------------------------------------------------------------------
@@ -39,12 +40,16 @@ class TecniForgeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: pushNavigatorKey, // lets push_notifications_service navigate on a tap
       debugShowCheckedModeBanner: false,
       title: 'TecniForge',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: context.watch<ThemeController>().mode,
       home: const SplashScreen(),
+      routes: {
+        '/notifications': (context) => const NotificationsScreen(),
+      },
     );
   }
 }
