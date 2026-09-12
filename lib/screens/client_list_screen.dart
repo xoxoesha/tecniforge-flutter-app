@@ -43,69 +43,33 @@ class _ClientListScreenState extends State<ClientListScreen> {
   }
 
   void _openForm({Client? existing}) {
-    final titleC = TextEditingController(text: existing?.title ?? '');
-    final bodyC = TextEditingController(text: existing?.body ?? '');
-    bool isSubmitting = false;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(existing == null ? 'Add Client' : 'Edit Client', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppTheme.ink)),
-              const SizedBox(height: 16),
-              AppTextField(label: 'Client name', controller: titleC),
-              const SizedBox(height: 12),
-              AppTextField(label: 'Notes', controller: bodyC),
-              const SizedBox(height: 16),
-              AppButton(
-                label: isSubmitting ? 'Saving...' : (existing == null ? 'Add' : 'Save'),
-                onPressed: isSubmitting
-                    ? () {}
-                    : () async {
-                  if (titleC.text.trim().isEmpty) return;
-                  setSheetState(() => isSubmitting = true);
-                  try {
-                    if (existing == null) {
-                      final c = await ClientApi.create(titleC.text.trim(), bodyC.text.trim());
-                      if (!mounted) return;
-                      Navigator.pop(ctx);
-                      setState(() => clients.insert(0, c));
-                      _snack('Client added');
-                    } else {
-                      await ClientApi.update(existing.id, titleC.text.trim(), bodyC.text.trim());
-                      if (!mounted) return;
-                      Navigator.pop(ctx);
-                      setState(() {
-                        existing.title = titleC.text.trim();
-                        existing.body = bodyC.text.trim();
-                      });
-                      _snack('Client updated');
-                    }
-                  } catch (e) {
-                    setSheetState(() => isSubmitting = false);
-                    _snack('Failed: $e', isError: true);
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
+      // The form's own controllers now live inside _ClientFormSheet, a
+      // proper StatefulWidget with its own initState/dispose. Flutter
+      // disposes it automatically at the right point in the sheet's
+      // close animation — no manual timing to get wrong.
+      builder: (ctx) => _ClientFormSheet(
+        existing: existing,
+        onSaved: (client, {required bool isNew}) {
+          Navigator.pop(ctx);
+          if (isNew) {
+            setState(() => clients.insert(0, client));
+            _snack('Client added');
+          } else {
+            setState(() {
+              existing!.title = client.title;
+              existing.body = client.body;
+            });
+            _snack('Client updated');
+          }
+        },
+        onError: (msg) => _snack('Failed: $msg', isError: true),
       ),
-    ).whenComplete(() {
-      // The bottom sheet is closed (submitted, swiped down, or tapped
-      // outside) — dispose these two controllers now so they don't sit
-      // in memory. A new pair is created fresh next time _openForm runs.
-      titleC.dispose();
-      bodyC.dispose();
-    });
+    );
   }
 
   Future<void> _delete(Client c) async {
@@ -184,5 +148,95 @@ class _ClientListScreenState extends State<ClientListScreen> {
           },
         );
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The Add/Edit Client form, as its own StatefulWidget.
+//
+// Why: previously the two TextEditingControllers were created as local
+// variables inside a plain function and disposed via `.whenComplete()` on
+// the bottom sheet's Future. That disposal could fire while the sheet's
+// closing animation was still running and the TextFields were still on
+// screen and reading from the controllers — causing a
+// "'_dependents.isEmpty': is not true" crash.
+//
+// Giving the form its own State object fixes this correctly: Flutter calls
+// dispose() on this State at the right point in the widget lifecycle
+// (after the sheet is fully removed from the tree), never while the
+// TextFields are still mounted and using the controllers.
+// ---------------------------------------------------------------------------
+class _ClientFormSheet extends StatefulWidget {
+  final Client? existing;
+  final void Function(Client client, {required bool isNew}) onSaved;
+  final void Function(String message) onError;
+
+  const _ClientFormSheet({required this.existing, required this.onSaved, required this.onError});
+
+  @override
+  State<_ClientFormSheet> createState() => _ClientFormSheetState();
+}
+
+class _ClientFormSheetState extends State<_ClientFormSheet> {
+  late final TextEditingController _titleC;
+  late final TextEditingController _bodyC;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleC = TextEditingController(text: widget.existing?.title ?? '');
+    _bodyC = TextEditingController(text: widget.existing?.body ?? '');
+  }
+
+  @override
+  void dispose() {
+    _titleC.dispose();
+    _bodyC.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_titleC.text.trim().isEmpty) return;
+    setState(() => _isSubmitting = true);
+    try {
+      final existing = widget.existing;
+      if (existing == null) {
+        final c = await ClientApi.create(_titleC.text.trim(), _bodyC.text.trim());
+        widget.onSaved(c, isNew: true);
+      } else {
+        await ClientApi.update(existing.id, _titleC.text.trim(), _bodyC.text.trim());
+        widget.onSaved(
+          Client(id: existing.id, title: _titleC.text.trim(), body: _bodyC.text.trim()),
+          isNew: false,
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isSubmitting = false);
+      widget.onError('$e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.existing == null ? 'Add Client' : 'Edit Client', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppTheme.ink)),
+          const SizedBox(height: 16),
+          AppTextField(label: 'Client name', controller: _titleC),
+          const SizedBox(height: 12),
+          AppTextField(label: 'Notes', controller: _bodyC),
+          const SizedBox(height: 16),
+          AppButton(
+            label: _isSubmitting ? 'Saving...' : (widget.existing == null ? 'Add' : 'Save'),
+            onPressed: _isSubmitting ? () {} : _submit,
+          ),
+        ],
+      ),
+    );
   }
 }
