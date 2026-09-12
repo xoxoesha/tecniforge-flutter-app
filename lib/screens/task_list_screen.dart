@@ -35,28 +35,31 @@ class _TaskListScreenState extends State<TaskListScreen> {
     super.dispose();
   }
 
-  // Re-queries SQLite for the current filter plus the counts shown in the
-  // subtitle and filter chips — every call here hits the on-device database,
-  // not an in-memory list.
   Future<void> _refresh() async {
     setState(() => _loading = true);
-    final completedFilter = switch (_filter) {
-      _TaskFilter.all => null,
-      _TaskFilter.active => false,
-      _TaskFilter.completed => true,
-    };
-    final results = await Future.wait([
-      TaskDbService.instance.getTasks(completed: completedFilter),
-      TaskDbService.instance.countTasks(),
-      TaskDbService.instance.countTasks(completed: false),
-    ]);
-    if (!mounted) return;
-    setState(() {
-      _tasks = results[0] as List<LocalTask>;
-      _totalCount = results[1] as int;
-      _activeCount = results[2] as int;
-      _loading = false;
-    });
+    try {
+      final completedFilter = switch (_filter) {
+        _TaskFilter.all => null,
+        _TaskFilter.active => false,
+        _TaskFilter.completed => true,
+      };
+      final results = await Future.wait([
+        TaskDbService.instance.getTasks(completed: completedFilter),
+        TaskDbService.instance.countTasks(),
+        TaskDbService.instance.countTasks(completed: false),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _tasks = results[0] as List<LocalTask>;
+        _totalCount = results[1] as int;
+        _activeCount = results[2] as int;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      _showError('Could not load tasks. Please try again.');
+    }
   }
 
   Future<void> _add() async {
@@ -75,22 +78,42 @@ class _TaskListScreenState extends State<TaskListScreen> {
     }
     setState(() {
       _error = null;
-      _submitting = true; // guards against double-tap while the insert runs
+      _submitting = true;
     });
-    await TaskDbService.instance.insertTask(text);
-    _controller.clear();
-    setState(() => _submitting = false);
-    await _refresh();
+    try {
+      await TaskDbService.instance.insertTask(text);
+      _controller.clear();
+      await _refresh();
+    } catch (e) {
+      setState(() => _error = "Couldn't save the task. Please try again.");
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   Future<void> _toggle(LocalTask task) async {
-    await TaskDbService.instance.setCompleted(task.id!, !task.completed);
-    await _refresh();
+    try {
+      await TaskDbService.instance.setCompleted(task.id!, !task.completed);
+      await _refresh();
+    } catch (e) {
+      _showError("Couldn't update that task. Please try again.");
+    }
   }
 
   Future<void> _delete(LocalTask task) async {
-    await TaskDbService.instance.deleteTask(task.id!);
-    await _refresh();
+    try {
+      await TaskDbService.instance.deleteTask(task.id!);
+      await _refresh();
+    } catch (e) {
+      _showError("Couldn't delete that task. Please try again.");
+    }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppTheme.errorRed),
+    );
   }
 
   @override
@@ -150,48 +173,48 @@ class _TaskListScreenState extends State<TaskListScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator(color: AppTheme.navyPrimary))
                 : _tasks.isEmpty
-                    ? Center(
-                        child: Text(
-                          _filter == _TaskFilter.all ? 'No tasks yet — add one above.' : 'Nothing here for this filter.',
-                          style: const TextStyle(color: AppTheme.slate),
+                ? Center(
+              child: Text(
+                _filter == _TaskFilter.all ? 'No tasks yet — add one above.' : 'Nothing here for this filter.',
+                style: const TextStyle(color: AppTheme.slate),
+              ),
+            )
+                : ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _tasks.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (ctx, i) {
+                final task = _tasks[i];
+                return FadeSlideIn(
+                  index: i,
+                  child: AppCard(
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: task.completed,
+                          activeColor: AppTheme.navyPrimary,
+                          onChanged: (_) => _toggle(task),
                         ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _tasks.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (ctx, i) {
-                          final task = _tasks[i];
-                          return FadeSlideIn(
-                            index: i,
-                            child: AppCard(
-                              child: Row(
-                                children: [
-                                  Checkbox(
-                                    value: task.completed,
-                                    activeColor: AppTheme.navyPrimary,
-                                    onChanged: (_) => _toggle(task),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                      task.title,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: task.completed ? AppTheme.slate : AppTheme.ink,
-                                        decoration: task.completed ? TextDecoration.lineThrough : null,
-                                      ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed),
-                                    onPressed: () => _delete(task),
-                                  ),
-                                ],
-                              ),
+                        Expanded(
+                          child: Text(
+                            task.title,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: task.completed ? AppTheme.slate : AppTheme.ink,
+                              decoration: task.completed ? TextDecoration.lineThrough : null,
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed),
+                          onPressed: () => _delete(task),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

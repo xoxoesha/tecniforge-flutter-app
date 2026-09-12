@@ -1,131 +1,269 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'notifications_service.dart'; // reuses `notificationsPlugin` from Fix 3
+
+import 'notifications_service.dart';
 
 // ---------------------------------------------------------------------------
-// PUSH NOTIFICATIONS — Firebase Cloud Messaging (FCM).
+// TecniForge — Firebase Cloud Messaging (FCM)
 //
-// Different from notifications_service.dart (Fix 3), which SCHEDULES alerts
-// from inside the app itself (zonedSchedule) — no server or internet needed.
-//
-// This file receives messages sent FROM a server (or the Firebase Console,
-// for testing) TO this specific device, over the internet, even while the
-// app is closed. That's what makes it "push" — the message is pushed to the
-// device, not scheduled locally.
-//
-// REFINEMENTS in this version (for reliable delivery/handling):
-//   1. An explicit Android notification channel is created up front, so
-//      delivery is consistent on Android 8+ regardless of when the app was
-//      first installed (an implicitly-created channel can end up with
-//      inconsistent settings across devices/app versions).
-//   2. Tapping a notification (from background OR a cold start/terminated
-//      app) now navigates the user to the Notifications screen, via a
-//      global navigatorKey — see main.dart.
-//   3. The FCM token is re-captured whenever it refreshes (e.g. after a
-//      reinstall), not just once at startup.
-//   4. Every step is wrapped so a Firebase/permission failure can't crash
-//      the rest of the app — push notifications degrade gracefully instead.
+// Handles:
+// 1. Firebase initialization
+// 2. Notification permission
+// 3. FCM token + token refresh
+// 4. Background messages
+// 5. Foreground notifications
+// 6. Notification taps from background
+// 7. Notification taps that launch the app from a terminated state
+// 8. Android notification channel
+// 9. Graceful error handling
 // ---------------------------------------------------------------------------
 
-/// Shared navigator key so this service can push a screen without needing
-/// a BuildContext (it runs during app startup / background isolates, where
-/// no widget context exists yet). Set as MaterialApp's navigatorKey.
-final GlobalKey<NavigatorState> pushNavigatorKey = GlobalKey<NavigatorState>();
+/// Global navigator key used when a notification is tapped.
+final GlobalKey<NavigatorState> pushNavigatorKey =
+GlobalKey<NavigatorState>();
 
-const _androidChannel = AndroidNotificationChannel(
+/// Android notification channel used by FCM foreground notifications.
+const AndroidNotificationChannel pushNotificationChannel =
+AndroidNotificationChannel(
   'push_channel',
   'Push Notifications',
-  description: 'Alerts sent from the server while the app is open',
+  description: 'Notifications received from Firebase Cloud Messaging',
   importance: Importance.high,
 );
 
-/// Must be a TOP-LEVEL function (not inside a class) — Android runs this in
-/// a separate isolate when a push arrives while the app is fully closed.
+/// Background FCM handler.
+///
+/// This MUST be a top-level function because Firebase can execute it
+/// in a separate background isolate.
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
-  // Nothing to do here for now — Android already shows the system
-  // notification automatically when the app isn't in the foreground.
-  // This handler exists so we *could* react to the data (e.g. update local
-  // storage) even while the app is closed.
-}
-
-/// Opens the Notifications screen when a push is tapped — used for both a
-/// background-tap and a cold-start tap (see initPushNotifications below).
-void _handleNotificationTap(RemoteMessage message) {
-  final navState = pushNavigatorKey.currentState;
-  if (navState == null) return;
-  navState.pushNamed('/notifications');
-}
-
-Future<void> initPushNotifications() async {
   try {
+    // Firebase must be initialized inside the background isolate.
     await Firebase.initializeApp();
 
-    // 1. Explicit channel — created once, before anything is shown on it.
-    await notificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_androidChannel);
+    debugPrint(
+      'Background FCM message received: ${message.messageId}',
+    );
+
+    debugPrint(
+      'Background notification title: ${message.notification?.title}',
+    );
+
+    debugPrint(
+      'Background notification body: ${message.notification?.body}',
+    );
+
+    debugPrint(
+      'Background data: ${message.data}',
+    );
+  } catch (e) {
+    debugPrint('Background FCM handler error: $e');
+  }
+}
+
+/// Navigate to the Notifications screen when a push notification is tapped.
+void _handleNotificationTap(RemoteMessage message) {
+  debugPrint(
+    'Notification tapped. Message ID: ${message.messageId}',
+  );
+
+  final navigator = pushNavigatorKey.currentState;
+
+  if (navigator == null) {
+    debugPrint('Navigator is not ready yet.');
+    return;
+  }
+
+  navigator.pushNamed('/notifications');
+}
+
+/// Initializes Firebase Cloud Messaging.
+Future<void> initPushNotifications() async {
+  try {
+    // -----------------------------------------------------------------------
+    // 1. Initialize Firebase
+    // -----------------------------------------------------------------------
+
+    await Firebase.initializeApp();
+
+    debugPrint('Firebase initialized successfully.');
 
     final messaging = FirebaseMessaging.instance;
 
-    // Android 13+ requires the user to explicitly allow notifications.
-    // Checking current status first avoids re-prompting a user who already
-    // said no, and lets us log the outcome either way.
-    final settings = await messaging.requestPermission(alert: true, badge: true, sound: true);
-    final granted = settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional;
-    // ignore: avoid_print
-    print('Push notification permission granted: $granted');
-    if (!granted) return; // nothing further to set up if the user declined
+    // -----------------------------------------------------------------------
+    // 2. Create Android notification channel
+    // -----------------------------------------------------------------------
 
-    // 3. Capture the token now, and again whenever it refreshes.
-    final token = await messaging.getToken();
-    // ignore: avoid_print
-    print('FCM token: $token');
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-      // ignore: avoid_print
-      print('FCM token refreshed: $newToken');
-      // A real backend would re-register the new token here.
-    });
+    final androidPlugin = notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
 
-    // Background/terminated messages are handled by Android automatically,
-    // but we still register the handler so we can react to the payload data.
-    FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
+    await androidPlugin?.createNotificationChannel(
+      pushNotificationChannel,
+    );
 
-    // Foreground messages need to be shown manually — Android doesn't pop a
-    // system notification for a message that arrives while the app is open.
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      final notification = message.notification;
-      if (notification == null) return;
-      notificationsPlugin.show(
-        notification.hashCode,
-        notification.title,
-        notification.body,
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            _androidChannel.id,
-            _androidChannel.name,
-            channelDescription: _androidChannel.description,
-            importance: Importance.high,
-            priority: Priority.high,
-          ),
-        ),
-      );
-    });
+    // -----------------------------------------------------------------------
+    // 3. Request notification permission
+    // -----------------------------------------------------------------------
 
-    // 2. Tap handling — covers both "app was in the background" and
-    // "app was fully closed and this notification is what opened it".
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
-    final initialMessage = await messaging.getInitialMessage();
-    if (initialMessage != null) {
-      _handleNotificationTap(initialMessage);
+    final settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
+    );
+
+    debugPrint(
+      'FCM authorization status: ${settings.authorizationStatus}',
+    );
+
+    final permissionGranted =
+        settings.authorizationStatus == AuthorizationStatus.authorized ||
+            settings.authorizationStatus == AuthorizationStatus.provisional;
+
+    if (!permissionGranted) {
+      debugPrint('FCM notification permission was not granted.');
+      return;
     }
+
+    // -----------------------------------------------------------------------
+    // 4. Get current FCM token
+    // -----------------------------------------------------------------------
+
+    try {
+      final token = await messaging.getToken();
+
+      debugPrint('FCM device token: $token');
+    } catch (e) {
+      debugPrint('Unable to get FCM token: $e');
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. Handle token refresh
+    // -----------------------------------------------------------------------
+
+    FirebaseMessaging.instance.onTokenRefresh.listen(
+          (newToken) {
+        debugPrint('FCM token refreshed: $newToken');
+
+        // In a production application, the refreshed token should
+        // be sent to the application's backend/server here.
+      },
+      onError: (error) {
+        debugPrint('FCM token refresh error: $error');
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 6. Register background message handler
+    // -----------------------------------------------------------------------
+
+    FirebaseMessaging.onBackgroundMessage(
+      firebaseBackgroundHandler,
+    );
+
+    // -----------------------------------------------------------------------
+    // 7. Handle messages received while app is OPEN
+    // -----------------------------------------------------------------------
+
+    FirebaseMessaging.onMessage.listen(
+          (RemoteMessage message) {
+        debugPrint(
+          'Foreground FCM message received: ${message.messageId}',
+        );
+
+        debugPrint(
+          'Foreground data: ${message.data}',
+        );
+
+        final notification = message.notification;
+
+        if (notification == null) {
+          debugPrint(
+            'Foreground message contains data only.',
+          );
+          return;
+        }
+
+        // Android does not automatically display the notification
+        // while the Flutter app is in the foreground, so we display
+        // it ourselves using flutter_local_notifications.
+
+        notificationsPlugin.show(
+          notification.hashCode,
+          notification.title ?? 'TecniForge',
+          notification.body ?? '',
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              pushNotificationChannel.id,
+              pushNotificationChannel.name,
+              channelDescription:
+              pushNotificationChannel.description,
+              importance: Importance.high,
+              priority: Priority.high,
+              icon: '@mipmap/ic_launcher',
+              playSound: true,
+            ),
+          ),
+          payload: message.data.toString(),
+        );
+      },
+      onError: (error) {
+        debugPrint('Foreground FCM listener error: $error');
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 8. Handle notification tap when app is in background
+    // -----------------------------------------------------------------------
+
+    FirebaseMessaging.onMessageOpenedApp.listen(
+          (RemoteMessage message) {
+        debugPrint(
+          'App opened from background notification.',
+        );
+
+        _handleNotificationTap(message);
+      },
+      onError: (error) {
+        debugPrint(
+          'Notification-open listener error: $error',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 9. Handle notification tap when app was completely closed
+    // -----------------------------------------------------------------------
+
+    try {
+      final initialMessage = await messaging.getInitialMessage();
+
+      if (initialMessage != null) {
+        debugPrint(
+          'App launched from terminated-state notification.',
+        );
+
+        // Give Flutter a moment to finish building the navigator.
+        WidgetsBinding.instance.addPostFrameCallback(
+              (_) {
+            _handleNotificationTap(initialMessage);
+          },
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        'Unable to read initial FCM message: $e',
+      );
+    }
+
+    debugPrint('FCM initialization completed successfully.');
   } catch (e) {
-    // 4. Never let a push-notification failure take the whole app down —
-    // log it and continue starting the app normally.
-    // ignore: avoid_print
-    print('Push notifications failed to initialize: $e');
+    // FCM failure should NOT prevent the rest of the app from starting.
+    debugPrint(
+      'FCM initialization failed: $e',
+    );
   }
 }
