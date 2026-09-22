@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
-import '../services/client_api.dart';
+import '../services/client_firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/animations.dart';
 import '../widgets/shared_widgets.dart';
@@ -25,7 +25,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
   Future<void> _load() async {
     setState(() => state = LoadState.loading);
     try {
-      final result = await ClientApi.readAll();
+      final result = await ClientFirestoreService.readAll();
       setState(() {
         clients = result;
         state = LoadState.success;
@@ -48,10 +48,6 @@ class _ClientListScreenState extends State<ClientListScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      // The form's own controllers now live inside _ClientFormSheet, a
-      // proper StatefulWidget with its own initState/dispose. Flutter
-      // disposes it automatically at the right point in the sheet's
-      // close animation — no manual timing to get wrong.
       builder: (ctx) => _ClientFormSheet(
         existing: existing,
         onSaved: (client, {required bool isNew}) {
@@ -74,7 +70,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
 
   Future<void> _delete(Client c) async {
     try {
-      await ClientApi.delete(c.id);
+      await ClientFirestoreService.delete(c.id);
       setState(() => clients.removeWhere((x) => x.id == c.id));
       _snack('Client deleted');
     } catch (e) {
@@ -87,7 +83,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
     return Scaffold(
       body: Column(
         children: [
-          AppTopBar(title: 'Clients', subtitle: state == LoadState.success ? '${clients.length} clients loaded' : 'Connected to REST API', showBack: true),
+          AppTopBar(title: 'Clients', subtitle: state == LoadState.success ? '${clients.length} clients loaded' : 'Connected to Firestore', showBack: true),
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
@@ -151,21 +147,6 @@ class _ClientListScreenState extends State<ClientListScreen> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// The Add/Edit Client form, as its own StatefulWidget.
-//
-// Why: previously the two TextEditingControllers were created as local
-// variables inside a plain function and disposed via `.whenComplete()` on
-// the bottom sheet's Future. That disposal could fire while the sheet's
-// closing animation was still running and the TextFields were still on
-// screen and reading from the controllers — causing a
-// "'_dependents.isEmpty': is not true" crash.
-//
-// Giving the form its own State object fixes this correctly: Flutter calls
-// dispose() on this State at the right point in the widget lifecycle
-// (after the sheet is fully removed from the tree), never while the
-// TextFields are still mounted and using the controllers.
-// ---------------------------------------------------------------------------
 class _ClientFormSheet extends StatefulWidget {
   final Client? existing;
   final void Function(Client client, {required bool isNew}) onSaved;
@@ -202,10 +183,10 @@ class _ClientFormSheetState extends State<_ClientFormSheet> {
     try {
       final existing = widget.existing;
       if (existing == null) {
-        final c = await ClientApi.create(_titleC.text.trim(), _bodyC.text.trim());
+        final c = await ClientFirestoreService.create(_titleC.text.trim(), _bodyC.text.trim());
         widget.onSaved(c, isNew: true);
       } else {
-        await ClientApi.update(existing.id, _titleC.text.trim(), _bodyC.text.trim());
+        await ClientFirestoreService.update(existing.id, _titleC.text.trim(), _bodyC.text.trim());
         widget.onSaved(
           Client(id: existing.id, title: _titleC.text.trim(), body: _bodyC.text.trim()),
           isNew: false,

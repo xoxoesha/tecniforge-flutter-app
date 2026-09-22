@@ -1,5 +1,4 @@
-package com.example.tecniforge_flutterapp
-
+package com.tecniforge.app
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity()

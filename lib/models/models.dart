@@ -1,10 +1,17 @@
 enum LoadState { loading, success, error }
 
 class Client {
-  final int id;
+  final String id;
   String title, body;
   Client({required this.id, required this.title, required this.body});
-  factory Client.fromJson(Map<String, dynamic> j) => Client(id: j['id'], title: j['title'] ?? '', body: j['body'] ?? '');
+
+  factory Client.fromFirestore(String id, Map<String, dynamic> data) => Client(
+    id: id,
+    title: data['title'] ?? '',
+    body: data['body'] ?? '',
+  );
+
+  Map<String, dynamic> toFirestore() => {'title': title, 'body': body};
 }
 
 class CartItem {
@@ -21,9 +28,6 @@ class TeamTask {
   TeamTask({required this.id, required this.title, required this.completed});
 }
 
-// LocalTask — backs the on-device SQLite-persisted Task List screen (see
-// services/task_db_service.dart). Unlike TeamTask (fetched from a REST API),
-// these rows live only in the local database and survive app restarts.
 class LocalTask {
   final int? id;
   final String title;
@@ -32,27 +36,26 @@ class LocalTask {
 
   LocalTask({this.id, required this.title, this.completed = false, required this.createdAt});
 
-  // Converts a row to the Map<String, Object?> sqflite expects for insert/update.
   Map<String, Object?> toMap() => {
-        'id': id,
-        'title': title,
-        'completed': completed ? 1 : 0,
-        'createdAt': createdAt.toIso8601String(),
-      };
+    'id': id,
+    'title': title,
+    'completed': completed ? 1 : 0,
+    'createdAt': createdAt.toIso8601String(),
+  };
 
   factory LocalTask.fromMap(Map<String, Object?> m) => LocalTask(
-        id: m['id'] as int?,
-        title: m['title'] as String,
-        completed: (m['completed'] as int) == 1,
-        createdAt: DateTime.parse(m['createdAt'] as String),
-      );
+    id: m['id'] as int?,
+    title: m['title'] as String,
+    completed: (m['completed'] as int) == 1,
+    createdAt: DateTime.parse(m['createdAt'] as String),
+  );
 
   LocalTask copyWith({bool? completed}) => LocalTask(
-        id: id,
-        title: title,
-        completed: completed ?? this.completed,
-        createdAt: createdAt,
-      );
+    id: id,
+    title: title,
+    completed: completed ?? this.completed,
+    createdAt: createdAt,
+  );
 }
 
 class Product {
@@ -94,10 +97,6 @@ String weatherLabel(int code) {
   return 'Thunderstorm';
 }
 
-// The API's /todos endpoint returns placeholder Latin-style filler text
-// for titles — meaningless test data, not a real language. The id and
-// completed status are still the real values from the server; only the
-// display title is swapped for a realistic business task name.
 const realisticTaskTitles = [
   'Confirm supplier invoice — Metro Textiles',
   'Follow up with Al-Noor Traders',
